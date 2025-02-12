@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, session, redirect, url_for, j
 import paramiko
 import time
 import json
+from paramiko.ssh_exception import SSHException
 import os
 import threading
 import shutil
@@ -75,7 +76,7 @@ def terminal():
 
 
 # API untuk data monitoring
-@app.route('/dashboard_data')
+@app.route('/monitoring_data')
 def monitoring_data():
     usage = get_usage()
     if usage:
@@ -83,11 +84,11 @@ def monitoring_data():
     return jsonify({'cpu': 0, 'memory': 0})
 
 # Monitoring Server
-@app.route('/dahboard')
+@app.route('/monitoring')
 def monitoring():
     if not session.get('logged_in'):
         return redirect(url_for('login'))
-    return render_template('monitoring.html')
+    return render_template('dashboard.html')
 
 
 #                       Function to get CPU and memory usage
@@ -96,18 +97,43 @@ def get_usage():
     if not ssh:
         return None
 
-    # Get CPU usage
-    stdin, stdout, stderr = ssh.exec_command("mpstat 1 1 | awk '/Average:/ {print 100 - $12}'")
-    cpu_usage = float(stdout.read().decode().strip())
+    try:
+        # Perintah untuk mendapatkan penggunaan CPU, memori, dan disk
+        cmd = "top -bn1 | grep 'Cpu(s)' && free -m | grep 'Mem' && df -h /"
+        stdin, stdout, stderr = ssh.exec_command(cmd)
+        output = stdout.read().decode().strip()
+        ssh.close()
 
-    # Get memory usage
-    stdin, stdout, stderr = ssh.exec_command("free -m | awk 'NR==2{printf \"%.2f\", $3*100/$2 }'")
-    mem_usage = float(stdout.read().decode().strip())
+        # Parsing output
+        cpu_line, mem_line, disk_line = output.split('\n', 2)
+        
+        # Parsing CPU usage
+        cpu_usage = cpu_line.split(',')
+        cpu_idle = cpu_usage[3].split()[0]
+        cpu_used = 100.0 - float(cpu_idle)
 
-    return {
-        'cpu': cpu_usage,
-        'memory': mem_usage
-    }
+        # Parsing memory usage
+        mem_usage = mem_line.split()
+        total_mem = float(mem_usage[1])
+        used_mem = float(mem_usage[2])
+        mem_used = (used_mem / total_mem) * 100.0
+
+        # Parsing disk usage
+        disk_usage = disk_line.split()
+        disk_used = disk_usage[4]  # Assuming the 5th column is the used percentage
+
+        # Format the values to two decimal places
+        mem_used = round(mem_used, 2)
+
+        return {
+            'cpu': cpu_used,
+            'memory': mem_used,
+            'disk': disk_used
+        }
+
+    except Exception as e:
+        print(f"Error: {e}")
+        return None
 
 # user management
 @app.route('/users')
@@ -218,13 +244,35 @@ def delete_user(username):
     if not session.get('logged_in'):
         return jsonify({"error": "Unauthorized"}), 401
 
+    if username == "root":
+        return jsonify({"error": "Cannot delete root user"}), 403
+
     ssh = create_ssh()
     if not ssh:
         return jsonify({"error": "SSH connection failed"}), 500
 
     try:
-        ssh.exec_command(f"sudo userdel -r {username}")
-        return jsonify({"success": True, "message": f"User {username} deleted successfully"})
+        # Perintah dengan penanganan sudo yang lebih baik
+        command = f"sudo -S userdel -r {username}"
+        
+        # Eksekusi dengan pseudo-TTY
+        stdin, stdout, stderr = ssh.exec_command(command, get_pty=True)
+        
+        # Kirim password sudo jika diperlukan
+        stdin.write(session['password'] + '\n')
+        stdin.flush()
+        
+        # Tunggu hingga perintah selesai
+        exit_status = stdout.channel.recv_exit_status()
+        
+        if exit_status == 0:
+            return jsonify({"success": True, "message": f"User {username} deleted"})
+        else:
+            error = stderr.read().decode().strip()
+            return jsonify({"error": f"Failed (code {exit_status}): {error}"}), 500
+            
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
     finally:
         ssh.close()
 
