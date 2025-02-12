@@ -1,0 +1,167 @@
+{% extends "dashboard.html" %}
+
+{% block content %}
+
+<style>
+    /* Make the table background transparent */
+.custom-table {
+    background-color: transparent !important;
+}
+
+/* Set font color to black */
+.custom-table th,
+.custom-table td {
+    color: black !important;
+}
+
+/* Center text vertically and align left horizontally */
+.custom-table th,
+.custom-table td {
+    vertical-align: middle !important; /* Center vertically */
+    text-align: left !important; /* Align text to the left */
+}
+
+/* Optional: Add padding for better spacing */
+.custom-table th,
+.custom-table td {
+    padding: 12px 16px !important;
+}
+
+/* Optional: Add a border to the table for better visibility */
+.custom-table {
+    border: 1px solid #dee2e6 !important;
+}
+
+/* Optional: Style the table header */
+.custom-table thead th {
+    background-color: rgba(0, 0, 0, 0.1) !important; /* Light background for header */
+    font-weight: bold !important;
+}
+</style>
+
+<div class="container mt-4">
+    <h3>👥 User Management</h3>
+    
+    <input type="text" id="search" class="form-control my-3" placeholder="🔍 Search by username, group, or ID">
+
+    <table class="table custom-table">
+        <thead>
+            <tr>
+                <th>Username</th>
+                <th>Full Name</th>
+                <th>ID</th>
+                <th>Last Active</th>
+                <th>Group</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="userTable">
+            <tr><td colspan="6" class="text-center">Loading...</td></tr>
+        </tbody>
+    </table>
+
+    <button class="btn btn-success" onclick="showAddUserModal()">➕ Add User</button>
+</div>
+
+<!-- Modal for Add User -->
+<div id="addUserModal" class="modal fade">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add User</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="text" id="newUsername" class="form-control my-2" placeholder="Username">
+                <input type="password" id="newPassword" class="form-control my-2" placeholder="Password">
+                <input type="text" id="newGroup" class="form-control my-2" placeholder="Group (Optional)">
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button class="btn btn-primary" onclick="addUser()">Add</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<script>
+// Fetch user list
+function loadUsers() {
+    fetch('/api/users')  // Fetch from the new endpoint
+    .then(res => {
+        if (!res.ok) throw new Error('Failed to load users');
+        return res.json();
+    })
+    .then(users => {
+        let rows = "";
+        users.forEach(user => {
+            rows += `<tr>
+                <td>${user.username}</td>
+                <td>${user.full_name}</td>
+                <td>${user.uid}</td>
+                <td>${user.last_active}</td>
+                <td>${user.groups}</td>
+                <td><button class="btn btn-danger btn-sm" onclick="deleteUser('${user.username}')">❌ Delete</button></td>
+            </tr>`;
+        });
+        document.getElementById("userTable").innerHTML = rows;
+    })
+    .catch(error => {
+        console.error(error);
+        document.getElementById("userTable").innerHTML = `<tr><td colspan="6" class="text-center text-danger">Error: ${error.message}</td></tr>`;
+    });
+}
+
+// Search function
+document.getElementById("search").addEventListener("input", function() {
+    let filter = this.value.toLowerCase();
+    document.querySelectorAll("#userTable tr").forEach(row => {
+        row.style.display = row.innerText.toLowerCase().includes(filter) ? "" : "none";
+    });
+});
+
+// Show add user modal
+function showAddUserModal() {
+    new bootstrap.Modal(document.getElementById("addUserModal")).show();
+}
+
+// Add user
+function addUser() {
+    let username = document.getElementById("newUsername").value;
+    let password = document.getElementById("newPassword").value;
+    let group = document.getElementById("newGroup").value;
+
+    fetch('/add_user', {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password, group })
+    })
+    .then(res => res.json())
+    .then(data => {
+        alert(data.message);
+        if (data.success) {
+            document.getElementById("newUsername").value = "";
+            document.getElementById("newPassword").value = "";
+            document.getElementById("newGroup").value = "";
+            loadUsers();
+        }
+    });
+}
+
+// Delete user
+function deleteUser(username) {
+    if (!confirm(`Are you sure you want to delete ${username}?`)) return;
+
+    fetch(`/delete_user/${username}`, { method: "DELETE" })
+    .then(res => res.json())
+    .then(data => {
+        alert(data.message);
+        if (data.success) loadUsers();
+    });
+}
+
+// Load users on page load
+loadUsers();
+</script>
+{% endblock %}

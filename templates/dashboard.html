@@ -19,7 +19,7 @@
             flex-direction: column;
         }
         .ssh-info {
-            background: #1a1e21; /* Slightly darker than sidebar */
+            background: #1a1e21;
             padding: 15px;
             font-weight: bold;
             font-size: 0.9rem;
@@ -28,7 +28,7 @@
         .ssh-info p {
             margin: 0;
             padding: 2px 0;
-            color: #adb5bd; /* Light gray text */
+            color: #adb5bd;
         }
         .sidebar .section-title {
             padding: 10px 15px;
@@ -59,7 +59,7 @@
             background: #0d6efd;
             color: white;
             font-weight: bold;
-            border-radius: 0; /* Remove border-radius */
+            border-radius: 0;
         }
         .content {
             margin-left: 270px;
@@ -72,26 +72,36 @@
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
         <div class="container-fluid">
             <a class="navbar-brand" href="#">🛠 Server Manager</a>
-            <div class="navbar-nav ms-auto">
-                <a class="nav-link text-light" href="/logout">Logout</a>
+            
+            <div class="dropdown ms-auto">
+                <button class="btn btn-dark dropdown-toggle" type="button" id="userDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                    👤 {{ session['username'] }}
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
+                    <li class="dropdown-header text-muted">🔗 Connected to</li>
+                    <li class="dropdown-item disabled">
+                        <strong>{{ session['host'] }}</strong>
+                    </li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item" href="#">🔄 Reconnect SSH</a></li>
+                    <li><a class="dropdown-item text-danger" href="/logout">🚪 Logout</a></li>
+                </ul>
             </div>
         </div>
     </nav>
 
     <!-- Sidebar -->
     <div class="sidebar">
-        <!-- SSH Info -->
         <div class="ssh-info">
-            <p>🖥 Host: {{ session['host'] }}</p>
+            <p>🖥 Host: {{ session['username'] }}</p>
             <p>🌐 IP: {{ session['host'] }}</p>
         </div>
 
-        <!-- Sidebar Sections -->
         <div class="list-group">
             <div class="section-title">System</div>
             <a href="/dashboard" class="list-group-item list-group-item-action {% if request.path == '/dashboard' %}active{% endif %}">🏠 Dashboard</a>
             <a href="/monitoring" class="list-group-item list-group-item-action {% if request.path == '/monitoring' %}active{% endif %}">📈 Overview</a>
-            
+            <a href="/users" class="list-group-item list-group-item-action {% if request.path == '/users' %}active{% endif %}">👥 User Management</a>
             <div class="section-title">Tools</div>
             <a href="/terminal" class="list-group-item list-group-item-action {% if request.path == '/terminal' %}active{% endif %}">💻 Terminal</a>
         </div>
@@ -101,5 +111,7 @@
     <div class="content">
         {% block content %}{% endblock %}
     </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

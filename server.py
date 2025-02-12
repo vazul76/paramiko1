@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, session, redirect, url_for, jsonify
 import paramiko
 import time
+import json
 
 import threading
 from datetime import datetime, timedelta
@@ -105,29 +106,154 @@ def get_usage():
         'memory': mem_usage
     }
 
-# # API untuk data monitoring
-# @app.route('/monitoring_data')
-# def monitoring_data():
-#     def get_usage(cmd):
-#         ssh = create_ssh()
-#         if ssh:
-#             stdin, stdout, stderr = ssh.exec_command(cmd)
-#             output = stdout.read().decode().strip()
-#             ssh.close()
-#             return float(output) if output else 0
-#         return 0
-    
-#     cpu = get_usage("top -bn1 | grep 'Cpu(s)' | awk '{print 100-$8}'")
-#     mem = get_usage("free -m | awk 'NR==2{printf \"%.2f\", $3*100/$2 }'")
-#     disk = get_usage("df / | awk 'NR==2{print $5}' | tr -d '%' ")
-    
-#     return jsonify({
-#         'cpu': cpu,
-#         'memory': mem,
-#         'disk': disk
-#     })
+# user management
+@app.route('/users')
+def users():
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
 
-# Logout
+    ssh = create_ssh()
+    if not ssh:
+        return "SSH connection failed", 500
+
+    try:
+        # Fetch users and groups
+        cmd = "getent passwd | awk -F: '{print $1, $3, $5}'"
+        stdin, stdout, stderr = ssh.exec_command(cmd)
+        users_data = stdout.read().decode().strip().split("\n")
+
+        cmd_groups = "getent group | awk -F: '{print $1, $4}'"
+        stdin, stdout, stderr = ssh.exec_command(cmd_groups)
+        groups_data = stdout.read().decode().strip().split("\n")
+
+        user_list = []
+        group_dict = {}
+
+        # Parse groups
+        for group in groups_data:
+            parts = group.split(":")
+            if len(parts) == 2:
+                group_dict[parts[1]] = parts[0]
+
+        # Parse users
+        for user in users_data:
+            parts = user.split(" ", 2)
+            if len(parts) >= 2:
+                username = parts[0]
+                uid = parts[1]
+                full_name = parts[2] if len(parts) > 2 else "No Name"
+                user_group = group_dict.get(username, "Unknown")
+
+                user_list.append({
+                    "username": username,
+                    "uid": uid,
+                    "full_name": full_name,
+                    "groups": user_group,
+                    "last_active": "**Never logged in**"
+                })
+
+        ssh.close()
+        return render_template('users.html', users=user_list)  # Render HTML template
+
+    except Exception as e:
+        ssh.close()
+        return str(e), 500
+    
+@app.route('/api/users')
+def api_users():
+    if not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized"}), 401
+
+    ssh = create_ssh()
+    if not ssh:
+        return jsonify({"error": "SSH connection failed"}), 500
+
+    try:
+        # Fetch users and groups
+        cmd = "getent passwd | awk -F: '{print $1, $3, $5}'"
+        stdin, stdout, stderr = ssh.exec_command(cmd)
+        users_data = stdout.read().decode().strip().split("\n")
+
+        cmd_groups = "getent group | awk -F: '{print $1, $4}'"
+        stdin, stdout, stderr = ssh.exec_command(cmd_groups)
+        groups_data = stdout.read().decode().strip().split("\n")
+
+        user_list = []
+        group_dict = {}
+
+        # Parse groups
+        for group in groups_data:
+            parts = group.split(":")
+            if len(parts) == 2:
+                group_dict[parts[1]] = parts[0]
+
+        # Parse users
+        for user in users_data:
+            parts = user.split(" ", 2)
+            if len(parts) >= 2:
+                username = parts[0]
+                uid = parts[1]
+                full_name = parts[2] if len(parts) > 2 else "No Name"
+                user_group = group_dict.get(username, "Unknown")
+
+                user_list.append({
+                    "username": username,
+                    "uid": uid,
+                    "full_name": full_name,
+                    "groups": user_group,
+                    "last_active": "**Never logged in**"
+                })
+
+        ssh.close()
+        return jsonify(user_list)  # Return JSON data
+
+    except Exception as e:
+        ssh.close()
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/add_user', methods=['POST'])
+def add_user():
+    if not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized"}), 401
+
+    data = request.json
+    username = data.get("username")
+    password = data.get("password")
+    group = data.get("group")
+
+    if not username or not password:
+        return jsonify({"error": "Username and password required"}), 400
+
+    ssh = create_ssh()
+    if not ssh:
+        return jsonify({"error": "SSH connection failed"}), 500
+
+    try:
+        cmd = f"sudo useradd -m {username} && echo '{username}:{password}' | sudo chpasswd"
+        if group:
+            cmd = f"sudo useradd -m -G {group} {username} && echo '{username}:{password}' | sudo chpasswd"
+        
+        ssh.exec_command(cmd)
+        return jsonify({"success": True, "message": f"User {username} added successfully"})
+    finally:
+        ssh.close()
+
+@app.route('/delete_user/<username>', methods=['DELETE'])
+def delete_user(username):
+    if not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized"}), 401
+
+    ssh = create_ssh()
+    if not ssh:
+        return jsonify({"error": "SSH connection failed"}), 500
+
+    try:
+        ssh.exec_command(f"sudo userdel -r {username}")
+        return jsonify({"success": True, "message": f"User {username} deleted successfully"})
+    finally:
+        ssh.close()
+
+
 @app.route('/logout')
 def logout():
     session.clear()
