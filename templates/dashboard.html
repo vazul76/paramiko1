@@ -100,7 +100,7 @@
         <div class="list-group">
             <div class="section-title">System</div>
             <a href="/dashboard" class="list-group-item list-group-item-action {% if request.path == '/dashboard' %}active{% endif %}">🏠 Dashboard</a>
-            <a href="/monitoring" class="list-group-item list-group-item-action {% if request.path == '/monitoring' %}active{% endif %}">📈 Overview</a>
+
             <a href="/users" class="list-group-item list-group-item-action {% if request.path == '/users' %}active{% endif %}">👥 User Management</a>
             <div class="section-title">Tools</div>
             <a href="/terminal" class="list-group-item list-group-item-action {% if request.path == '/terminal' %}active{% endif %}">💻 Terminal</a>
@@ -109,9 +109,95 @@
 
     <!-- Content -->
     <div class="content">
-        {% block content %}{% endblock %}
+        {% block content %}
+        <div class="card shadow">
+            <div class="card-body">
+                <h2 class="card-title mb-4 ">Welcome, {{ session['username'] }}</h2>
+            </div>
+        </div>
+        <br>
+        <div class="card shadow">
+            <div class="card-body">
+                <h4 class="card-title mb-4">📊 Resource</h4>
+                <div class="container">
+                    <div id="gauges" class="d-flex justify-content-around">
+                        <div id="cpu-bar" style="width: 30%; margin-top: 10px"></div>
+                        <div id="memory-bar" style="width: 30%;"></div>
+                        <div id="disk-bar" style="width: 30%;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endblock %}
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+<script>
+    function updateBars(data) {
+        const barLayout = {
+            height: 120,  // Tinggi grafik sedikit ditambah
+            margin: { t: 30, b: 20, l: 50, r: 20 },  // Margin diperluas
+            xaxis: { range: [0, 100], showgrid: false, zeroline: false },
+            yaxis: { showticklabels: false },
+            title: { font: { size: 12 } }  // Ukuran font judul disesuaikan
+        };
+
+        // CPU Bar
+        Plotly.newPlot('cpu-bar', [{
+            type: "bar",
+            x: [data.cpu],
+            orientation: 'h',
+            marker: { color: "#4e73df" },
+            text: `${data.cpu}%`,
+            textposition: 'inside',
+            textfont: { size: 14 }  // Ukuran font teks di dalam bar
+        }], {
+            ...barLayout,
+            title: { text: "CPU Usage" }
+        });
+
+        // Memory Bar
+        Plotly.newPlot('memory-bar', [{
+            type: "bar",
+            x: [data.memory],
+            orientation: 'h',
+            marker: { color: "#1cc88a" },
+            text: `${data.memory}%`,
+            textposition: 'inside',
+            textfont: { size: 14 }  // Ukuran font teks di dalam bar
+        }], {
+            ...barLayout,
+            title: { text: "Memory Usage" }
+        });
+
+        // Disk Bar
+        Plotly.newPlot('disk-bar', [{
+            type: "bar",
+            x: [data.disk],
+            orientation: 'h',
+            marker: { color: "#36b9cc" },
+            text: `${data.disk}%`,
+            textposition: 'inside',
+            textfont: { size: 14 }  // Ukuran font teks di dalam bar
+        }], {
+            ...barLayout,
+            title: { text: "Disk Usage" }
+        });
+    }
+
+    function fetchMonitoringData() {
+        fetch('/monitoring_data')
+            .then(response => response.json())
+            .then(data => updateBars(data))
+            .catch(error => console.error('Error fetching monitoring data:', error));
+    }
+
+    // Fetch data every 5 seconds
+    setInterval(fetchMonitoringData, 5000);
+
+    // Initial fetch
+    fetchMonitoringData();
+</script>
 </body>
 </html>

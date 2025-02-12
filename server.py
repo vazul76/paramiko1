@@ -72,7 +72,7 @@ def terminal():
 
 
 # API untuk data monitoring
-@app.route('/monitoring_data')
+@app.route('/dashboard_data')
 def monitoring_data():
     usage = get_usage()
     if usage:
@@ -80,7 +80,7 @@ def monitoring_data():
     return jsonify({'cpu': 0, 'memory': 0})
 
 # Monitoring Server
-@app.route('/monitoring')
+@app.route('/dahboard')
 def monitoring():
     if not session.get('logged_in'):
         return redirect(url_for('login'))
@@ -117,47 +117,33 @@ def users():
         return "SSH connection failed", 500
 
     try:
-        # Fetch users and groups
-        cmd = "getent passwd | awk -F: '{print $1, $3, $5}'"
+        # Fetch users with home directories in /home or /root
+        cmd = "getent passwd | awk -F: '$6 ~ /^\\/home\\/|^\\/root$/ {print $1, $3, $6}'"
         stdin, stdout, stderr = ssh.exec_command(cmd)
         users_data = stdout.read().decode().strip().split("\n")
 
-        cmd_groups = "getent group | awk -F: '{print $1, $4}'"
-        stdin, stdout, stderr = ssh.exec_command(cmd_groups)
-        groups_data = stdout.read().decode().strip().split("\n")
-
         user_list = []
-        group_dict = {}
 
-        # Parse groups
-        for group in groups_data:
-            parts = group.split(":")
-            if len(parts) == 2:
-                group_dict[parts[1]] = parts[0]
-
-        # Parse users
         for user in users_data:
-            parts = user.split(" ", 2)
-            if len(parts) >= 2:
+            parts = user.split(" ")
+            if len(parts) >= 3:
                 username = parts[0]
                 uid = parts[1]
-                full_name = parts[2] if len(parts) > 2 else "No Name"
-                user_group = group_dict.get(username, "Unknown")
+                home_dir = parts[2]
 
                 user_list.append({
                     "username": username,
                     "uid": uid,
-                    "full_name": full_name,
-                    "groups": user_group,
-                    "last_active": "**Never logged in**"
+                    "home_directory": home_dir
                 })
 
         ssh.close()
-        return render_template('users.html', users=user_list)  # Render HTML template
+        return render_template('users.html', users=user_list)
 
     except Exception as e:
         ssh.close()
         return str(e), 500
+
     
 @app.route('/api/users')
 def api_users():
@@ -169,47 +155,33 @@ def api_users():
         return jsonify({"error": "SSH connection failed"}), 500
 
     try:
-        # Fetch users and groups
-        cmd = "getent passwd | awk -F: '{print $1, $3, $5}'"
+        # Fetch users with home directories in /home or /root
+        cmd = "getent passwd | awk -F: '$6 ~ /^\\/home\\/|^\\/root$/ {print $1, $3, $6}'"
         stdin, stdout, stderr = ssh.exec_command(cmd)
         users_data = stdout.read().decode().strip().split("\n")
 
-        cmd_groups = "getent group | awk -F: '{print $1, $4}'"
-        stdin, stdout, stderr = ssh.exec_command(cmd_groups)
-        groups_data = stdout.read().decode().strip().split("\n")
-
         user_list = []
-        group_dict = {}
 
-        # Parse groups
-        for group in groups_data:
-            parts = group.split(":")
-            if len(parts) == 2:
-                group_dict[parts[1]] = parts[0]
-
-        # Parse users
         for user in users_data:
-            parts = user.split(" ", 2)
-            if len(parts) >= 2:
+            parts = user.split(" ")
+            if len(parts) >= 3:
                 username = parts[0]
                 uid = parts[1]
-                full_name = parts[2] if len(parts) > 2 else "No Name"
-                user_group = group_dict.get(username, "Unknown")
+                home_dir = parts[2]
 
                 user_list.append({
                     "username": username,
                     "uid": uid,
-                    "full_name": full_name,
-                    "groups": user_group,
-                    "last_active": "**Never logged in**"
+                    "home_directory": home_dir
                 })
 
         ssh.close()
-        return jsonify(user_list)  # Return JSON data
+        return jsonify(user_list)
 
     except Exception as e:
         ssh.close()
         return jsonify({"error": str(e)}), 500
+
 
 @app.route('/add_user', methods=['POST'])
 def add_user():
