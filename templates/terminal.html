@@ -1,0 +1,57 @@
+{% extends "dashboard.html" %}
+{% block content %}
+<div class="card shadow">
+    <div class="card-body">
+        <h4 class="card-title mb-4">💻 SSH Terminal</h4>
+        
+        <!-- Terminal Container -->
+        <div id="terminal-container" class="bg-dark text-light p-3 rounded" style="height: 500px; background-color: black;"></div>
+    </div>
+</div>
+
+<div class="container mt-4">
+    <h2 class="text-center">SSH Terminal</h2>
+    <form method="POST">
+        <div class="form-group">
+            <input type="text" name="command" class="form-control" placeholder="Enter a command to execute" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Run Command</button>
+    </form>
+    <h3 class="mt-4">Command Logs</h3>
+    <div class="command-logs">
+        {% for log in command_logs %}
+            <pre>{{ log }}</pre>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- Import xterm.js -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm/css/xterm.css">
+<script src="https://cdn.jsdelivr.net/npm/xterm/lib/xterm.js"></script>
+<script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        var socket = io.connect();
+        var term = new Terminal();
+        term.open(document.getElementById("terminal-container"));
+
+        socket.on("connect", function() {
+            term.write("Connected to SSH\n");
+        });
+
+        term.onData(function(data) {
+            socket.emit("terminal_input", { command: data });
+        });
+
+        socket.on("terminal_output", function(data) {
+            term.write(data.output);
+        });
+
+        socket.on("disconnect", function() {
+            term.write("\nDisconnected from SSH");
+        });
+    });
+</script>
+
+{% endblock %}
