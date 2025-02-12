@@ -1,31 +1,95 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>File Explorer</title>
-    <script>
-        function loadFiles(path = "/home") {
-            fetch(`/list_files?path=${encodeURIComponent(path)}`)
-            .then(res => res.json())
-            .then(data => {
-                let content = "<ul>";
-                data.forEach(item => {
-                    if (item.is_dir) {
-                        content += `<li><a href="#" onclick="loadFiles('${path}/${item.name}')">📁 ${item.name}</a></li>`;
-                    } else {
-                        content += `<li>📄 ${item.name} <a href="/download?file=${path}/${item.name}">[Download]</a></li>`;
-                    }
-                });
-                content += "</ul>";
-                document.getElementById("fileList").innerHTML = content;
+{% extends "dashboard.html" %}
+
+{% block content %}
+<div class="file-explorer">
+    <!-- Breadcrumb Navigation -->
+    <div class="breadcrumb" id="breadcrumb">
+        <a href="#" onclick="loadFiles('/home')">HOME</a>
+    </div>
+
+    <!-- Upload Section -->
+    <div class="upload-section">
+        <label for="file-upload">📁 Upload File</label>
+        <input type="file" id="file-upload" onchange="uploadFile(event)">
+    </div>
+
+    <!-- File Grid -->
+    <div class="file-grid" id="fileList">
+        Loading...
+    </div>
+</div>
+
+<script>
+    let currentPath = "/home";
+
+    function loadFiles(path = currentPath) {
+        currentPath = path;
+        fetch(`/list_files?path=${encodeURIComponent(path)}`)
+        .then(res => res.json())
+        .then(data => {
+            updateBreadcrumb(path);
+            let content = "";
+            data.forEach(item => {
+                content += `
+                    <div class="file-item">
+                        <div class="file-actions">
+                            <i class="fas fa-ellipsis-v"></i>
+                            <div class="dropdown-menu">
+                                <a href="#" onclick="downloadFile('${path}/${item.name}')">Download</a>
+                                <a href="#" onclick="deleteFile('${path}/${item.name}')">Delete</a>
+                                <a href="#" onclick="renameFile('${path}/${item.name}')">Rename</a>
+                            </div>
+                        </div>
+                        ${item.is_dir ? '<i class="fas fa-folder"></i>' : '<i class="fas fa-file"></i>'}
+                        <div class="file-name">
+                            ${item.is_dir ? `<a href="#" onclick="loadFiles('${path}/${item.name}')">${item.name}</a>` : item.name}
+                        </div>
+                    </div>`;
             });
+            document.getElementById("fileList").innerHTML = content;
+        });
+    }
+
+    function updateBreadcrumb(path) {
+        let parts = path.split("/");
+        let breadcrumb = '<a href="#" onclick="loadFiles(\'/home\')">HOME</a>';
+        let currentPath = "/home";
+        for (let i = 1; i < parts.length; i++) {
+            currentPath += `/${parts[i]}`;
+            breadcrumb += ` / <a href="#" onclick="loadFiles('${currentPath}')">${parts[i]}</a>`;
         }
-        window.onload = () => loadFiles();
-    </script>
-</head>
-<body>
-    <h2>File Explorer</h2>
-    <div id="fileList">Loading...</div>
-</body>
-</html>
+        document.getElementById("breadcrumb").innerHTML = breadcrumb;
+    }
+
+    function downloadFile(filePath) {
+        window.location.href = `/download?file=${encodeURIComponent(filePath)}`;
+    }
+
+    function deleteFile(filePath) {
+        if (confirm(`Are you sure you want to delete ${filePath}?`)) {
+            fetch(`/delete_file?file=${encodeURIComponent(filePath)}`, { method: "DELETE" })
+            .then(() => loadFiles(currentPath));
+        }
+    }
+
+    function renameFile(filePath) {
+        let newName = prompt("Enter new name:", filePath.split("/").pop());
+        if (newName) {
+            fetch(`/rename_file?file=${encodeURIComponent(filePath)}&new_name=${encodeURIComponent(newName)}`, { method: "POST" })
+            .then(() => loadFiles(currentPath));
+        }
+    }
+
+    function uploadFile(event) {
+        let file = event.target.files[0];
+        let formData = new FormData();
+        formData.append("file", file);
+        formData.append("path", currentPath);
+
+        fetch("/upload_file", { method: "POST", body: formData })
+        .then(() => loadFiles(currentPath));
+    }
+
+    window.onload = () => loadFiles();
+</script>
+{% endblock %}

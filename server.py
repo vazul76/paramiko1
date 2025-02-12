@@ -4,6 +4,7 @@ import time
 import json
 import os
 import threading
+import shutil
 from datetime import datetime, timedelta
 
 app = Flask(__name__)
@@ -260,6 +261,53 @@ def download_file():
     if os.path.exists(file_path):
         return send_file(file_path, as_attachment=True)
     return "File not found", 404
+
+# Delete file
+@app.route('/delete_file', methods=['DELETE'])
+def delete_file():
+    file_path = request.args.get("file")
+    if os.path.exists(file_path):
+        try:
+            if os.path.isdir(file_path):
+                shutil.rmtree(file_path)  # Delete directory
+            else:
+                os.remove(file_path)  # Delete file
+            return jsonify({"success": True})
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    return jsonify({"error": "File not found"}), 404
+
+# Rename file
+@app.route('/rename_file', methods=['POST'])
+def rename_file():
+    file_path = request.args.get("file")
+    new_name = request.args.get("new_name")
+    if os.path.exists(file_path):
+        try:
+            new_path = os.path.join(os.path.dirname(file_path), new_name)
+            os.rename(file_path, new_path)
+            return jsonify({"success": True})
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    return jsonify({"error": "File not found"}), 404
+
+# Upload file
+@app.route('/upload_file', methods=['POST'])
+def upload_file():
+    if "file" not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+
+    file = request.files["file"]
+    path = request.form.get("path", BASE_DIR)
+
+    if file.filename == "":
+        return jsonify({"error": "No file selected"}), 400
+
+    try:
+        file.save(os.path.join(path, file.filename))
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)
