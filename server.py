@@ -1,13 +1,15 @@
-from flask import Flask, render_template, request, session, redirect, url_for, jsonify
+from flask import Flask, render_template, request, session, redirect, url_for, jsonify, send_file
 import paramiko
 import time
 import json
-
+import os
 import threading
 from datetime import datetime, timedelta
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key_here'  # Ganti dengan secret key yang aman
+
+BASE_DIR = "/home"
 
 # Helper function untuk membuat koneksi SSH
 def create_ssh():
@@ -230,6 +232,34 @@ def delete_user(username):
 def logout():
     session.clear()
     return redirect(url_for('login'))
+
+# file explorer
+@app.route("/files")
+def index():
+    return render_template("file_explorer.html")
+
+@app.route("/list_files", methods=["GET"])
+def list_files():
+    path = request.args.get("path", BASE_DIR)
+    if not os.path.exists(path):
+        return jsonify({"error": "Path does not exist"}), 400
+
+    items = []
+    for entry in os.scandir(path):
+        items.append({
+            "name": entry.name,
+            "is_dir": entry.is_dir(),
+            "size": os.path.getsize(entry.path) if not entry.is_dir() else None,
+        })
+
+    return jsonify(items)
+
+@app.route("/download", methods=["GET"])
+def download_file():
+    file_path = request.args.get("file")
+    if os.path.exists(file_path):
+        return send_file(file_path, as_attachment=True)
+    return "File not found", 404
 
 if __name__ == '__main__':
     app.run(debug=True)
