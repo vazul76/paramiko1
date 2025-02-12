@@ -2,7 +2,7 @@ from flask import Flask, render_template, request, session, redirect, url_for, j
 import paramiko
 import time
 import json
-
+from paramiko.ssh_exception import SSHException
 import threading
 from datetime import datetime, timedelta
 
@@ -240,13 +240,35 @@ def delete_user(username):
     if not session.get('logged_in'):
         return jsonify({"error": "Unauthorized"}), 401
 
+    if username == "root":
+        return jsonify({"error": "Cannot delete root user"}), 403
+
     ssh = create_ssh()
     if not ssh:
         return jsonify({"error": "SSH connection failed"}), 500
 
     try:
-        ssh.exec_command(f"sudo userdel -r {username}")
-        return jsonify({"success": True, "message": f"User {username} deleted successfully"})
+        # Perintah dengan penanganan sudo yang lebih baik
+        command = f"sudo -S userdel -r {username}"
+        
+        # Eksekusi dengan pseudo-TTY
+        stdin, stdout, stderr = ssh.exec_command(command, get_pty=True)
+        
+        # Kirim password sudo jika diperlukan
+        stdin.write(session['password'] + '\n')
+        stdin.flush()
+        
+        # Tunggu hingga perintah selesai
+        exit_status = stdout.channel.recv_exit_status()
+        
+        if exit_status == 0:
+            return jsonify({"success": True, "message": f"User {username} deleted"})
+        else:
+            error = stderr.read().decode().strip()
+            return jsonify({"error": f"Failed (code {exit_status}): {error}"}), 500
+            
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
     finally:
         ssh.close()
 
